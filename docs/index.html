@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Grúa — Simulación de Péndulo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap');
+
+  :root {
+    --paper: #EDE8DC;
+    --ink: #1B2430;
+    --blueprint: #2B4C6F;
+    --grid: rgba(43,76,111,0.14);
+    --yellow: #F2B705;
+    --red: #C1440E;
+    --panel: #E4DCC9;
+    --green: #1F6F5C;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  h1 {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-size: 22px;
+    margin: 0;
+  }
+  h1 span { color: var(--red); }
+
+  .doc-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--blueprint);
+    text-align: right;
+    line-height: 1.5;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--ink);
+    padding: 18px;
+    position: relative;
+  }
+  .panel::before {
+    content: attr(data-label);
+    position: absolute;
+    top: -10px; left: 12px;
+    background: var(--paper);
+    padding: 0 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--blueprint);
+    text-transform: uppercase;
+  }
+
+  .scene-row { display: flex; gap: 18px; align-items: stretch; }
+  canvas#scene {
+    width: 100%; max-width: 620px; aspect-ratio: 1 / 1;
+    background: var(--paper); border: 1px dashed var(--blueprint);
+  }
+
+  .height-gauge-wrap {
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 70px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--blueprint);
+  }
+  .height-gauge {
+    flex: 1; width: 22px; background: var(--paper);
+    border: 1px solid var(--ink); position: relative; margin: 6px 0;
+    min-height: 220px;
+  }
+  .height-gauge .fill {
+    position: absolute; bottom: 0; left: 0; width: 100%;
+    background: var(--blueprint);
+  }
+  .height-gauge .mast-top {
+    position: absolute; top: 0; left: -8px; right: -8px;
+    border-top: 2px solid var(--ink);
+  }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--blueprint);
+  }
+  .legend span.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+
+  .controls-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
+
+  .section-title {
+    font-family: 'Oswald', sans-serif; text-transform: uppercase; font-size: 12px;
+    letter-spacing: 0.5px; color: var(--blueprint); border-top: 1px dashed var(--blueprint);
+    padding-top: 10px; margin-top: 2px;
+  }
+  .section-title.first { border-top: none; padding-top: 0; margin-top: 0; }
+
+  .pad-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .pad-btn {
+    font-family: 'Oswald', sans-serif;
+    text-transform: uppercase;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    padding: 18px 10px;
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--ink);
+    cursor: pointer;
+    text-align: center;
+    touch-action: none;
+  }
+  .pad-btn:active, .pad-btn.active { background: var(--blueprint); }
+  .pad-btn.stop {
+    grid-column: 1 / 3;
+    background: var(--red);
+    color: var(--paper);
+    font-weight: 600;
+  }
+  .pad-btn.stop:active { background: #8f3009; }
+
+  .slider-row label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  input[type=range] { width: 100%; accent-color: var(--blueprint); }
+  input[type=number] {
+    font-family: 'IBM Plex Mono', monospace;
+    width: 70px; padding: 4px 6px; border: 1px solid var(--ink); background: var(--paper);
+  }
+
+  .safety-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .switch {
+    position: relative; width: 52px; height: 26px;
+    background: #ccc2a6; border: 1px solid var(--ink); cursor: pointer; flex-shrink: 0;
+  }
+  .switch.on { background: var(--yellow); }
+  .switch .knob {
+    position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+    background: var(--ink); transition: left 0.15s ease;
+  }
+  .switch.on .knob { left: 28px; background: var(--red); }
+
+  .safety-label { font-family: 'Oswald', sans-serif; text-transform: uppercase; font-size: 13px; letter-spacing: 0.5px; }
+
+  .safety-detail { opacity: 1; transition: opacity 0.15s ease; }
+  .safety-detail.disabled { opacity: 0.4; pointer-events: none; }
+
+  .computed-box {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+    background: var(--paper); border: 1px solid var(--blueprint);
+    padding: 8px 10px; line-height: 1.7;
+  }
+  .computed-box b { color: var(--red); }
+
+  .calib-row { display: flex; justify-content: space-between; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; gap: 8px; }
+
+  .conn-row { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  .conn-row input[type=text] {
+    flex: 1; min-width: 110px;
+    font-family: 'IBM Plex Mono', monospace;
+    padding: 6px 8px;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+  }
+  button {
+    font-family: 'IBM Plex Mono', monospace;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    padding: 8px 12px;
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--ink);
+    cursor: pointer;
+  }
+  button:hover { background: var(--blueprint); }
+  button.secondary { background: transparent; color: var(--ink); }
+
+  #status { font-family: 'IBM Plex Mono', monospace; font-size: 11px; margin-top: 8px; color: var(--blueprint); }
+  #status.err { color: var(--red); }
+
+  .readouts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 18px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    margin-top: 12px;
+  }
+  .readouts div { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--blueprint); padding-bottom: 3px; }
+  .readouts b { font-weight: 600; }
+  .readouts .warn b { color: var(--red); }
+
+  #energyBar { width: 100%; height: 14px; background: var(--paper); border: 1px solid var(--ink); margin-top: 6px; position: relative; overflow: hidden; }
+  #energyFill { height: 100%; background: var(--blueprint); width: 0%; transition: width 0.1s linear; }
+
+  .dims {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--blueprint);
+    margin-top: 12px;
+    border-top: 1px dashed var(--blueprint);
+    padding-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Control de Grúa <span>&mdash; Gemelo de Péndulo</span></h1>
+  <div class="doc-tag">
+    ESQUEMA-01 · REV D (servos continuos)<br>
+    Física — dinámica de carga suspendida
+  </div>
+</header>
+
+<div class="layout">
+
+  <div class="panel" data-label="Vista superior (planta) + altura de carga">
+    <div class="scene-row">
+      <canvas id="scene" width="640" height="640"></canvas>
+      <div class="height-gauge-wrap">
+        <span>ALTURA</span>
+        <div class="height-gauge">
+          <div class="mast-top"></div>
+          <div class="fill" id="heightFill"></div>
+        </div>
+        <span id="heightLabel">0.00 m</span>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div><span class="sw" style="background:#1B2430"></span>carga estable</div>
+      <div><span class="sw" style="background:#F2B705"></span>oscilación moderada</div>
+      <div><span class="sw" style="background:#C1440E"></span>oscilación fuerte</div>
+      <div><span class="sw" style="background:#2B4C6F; border-radius:0; width:14px; height:2px;"></span>radio del boom (R)</div>
+    </div>
+
+    <div class="readouts" id="readouts">
+      <div><span>Ángulo boom estimado (φ)</span><b id="rRot">0.0°</b></div>
+      <div><span>Vel. angular boom (ω)</span><b id="rOmega">0.00 °/s</b></div>
+      <div><span>Acel. angular boom (α)</span><b id="rAlpha">0.00 °/s²</b></div>
+      <div class="warn"><span>Ángulo péndulo (θ)</span><b id="rTheta">0.0°</b></div>
+      <div><span>Amplitud máx. registrada</span><b id="rMaxTheta">0.0°</b></div>
+      <div><span>Largo de cable estimado (L)</span><b id="rL">0.00 m</b></div>
+    </div>
+    <div>
+      <span style="font-family:'IBM Plex Mono',monospace; font-size:11px;">Energía mecánica de la carga</span>
+      <div id="energyBar"><div id="energyFill"></div></div>
+    </div>
+    <div class="dims">
+      Modelo: R = 0.12 m · mástil = 0.27 m ·
+      φ y L son <b>estimados</b> integrando la velocidad comandada en el
+      tiempo (los servos son de rotación continua, sin sensor de posición) —
+      pueden desviarse de la realidad con el uso; usá "Reiniciar posición"
+      para recalibrar contra una referencia física conocida.
+    </div>
+  </div>
+
+  <div class="panel" data-label="Panel de control">
+    <div class="controls-grid">
+
+      <div class="section-title first">Rotación del boom</div>
+      <div class="pad-grid">
+        <button class="pad-btn" id="rotLeft">◀ Izquierda</button>
+        <button class="pad-btn" id="rotRight">Derecha ▶</button>
+      </div>
+
+      <div class="section-title">Altura de la carga</div>
+      <div class="pad-grid">
+        <button class="pad-btn" id="hoistUp">▲ Subir</button>
+        <button class="pad-btn" id="hoistDown">▼ Bajar</button>
+        <button class="pad-btn stop" id="stopBtn">■ DETENER TODO</button>
+      </div>
+
+      <div class="slider-row">
+        <label><span>Velocidad máxima (mantener presionado)</span><span id="speedVal">100%</span></label>
+        <input type="range" id="speedSlider" min="10" max="100" value="100">
+      </div>
+
+      <div class="section-title">Calibración (medida en tu grúa real)</div>
+      <div class="calib-row">
+        <span>Velocidad del boom a 100% (°/s)</span>
+        <input type="number" id="boomDpsInput" value="60" min="1" max="720" step="1">
+      </div>
+      <div class="calib-row">
+        <span>Velocidad del cable a 100% (m/s)</span>
+        <input type="number" id="hoistMpsInput" value="0.05" min="0.001" max="1" step="0.001">
+      </div>
+      <div class="calib-row">
+        <button id="resetPosBtn" class="secondary" style="border:1px solid var(--ink); flex:1;">Reiniciar posición estimada</button>
+      </div>
+
+      <div class="section-title">Mecanismo de seguridad</div>
+
+      <div class="safety-row">
+        <span class="safety-label">Activar</span>
+        <div class="switch" id="safetySwitch"><div class="knob"></div></div>
+      </div>
+
+      <div style="font-size:11px; font-family:'IBM Plex Mono',monospace; color:var(--blueprint); line-height:1.5;">
+        Al girar con una carga, el motor necesita torque para acelerar la
+        inercia del boom + la carga (a mayor radio y masa, mayor inercia).
+        Con torque fijo, más masa obliga a acelerar más despacio.
+      </div>
+
+      <div class="slider-row">
+        <label><span>Masa de la carga</span><span id="massVal">0.15 kg</span></label>
+        <input type="range" id="massSlider" min="2" max="100" value="15">
+      </div>
+
+      <div class="safety-detail" id="safetyDetail">
+        <div class="slider-row">
+          <label><span>Torque de referencia del motor</span><span id="torqueVal">5.0 kg·cm</span></label>
+          <input type="range" id="torqueSlider" min="10" max="200" value="50">
+        </div>
+        <div class="slider-row">
+          <label><span>Factor de conservadurismo (aceleración)</span><span id="factorVal">0.30×</span></label>
+          <input type="range" id="factorSlider" min="10" max="100" value="30">
+        </div>
+        <div class="slider-row">
+          <label><span>Reducción de velocidad en modo seguro</span><span id="velfactorVal">0.50×</span></label>
+          <input type="range" id="velfactorSlider" min="10" max="100" value="50">
+        </div>
+      </div>
+
+      <div class="computed-box" id="computedBox">calculando…</div>
+
+      <div class="section-title">Conexión con la grúa (MQTT)</div>
+      <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--blueprint); line-height:1.5;">
+        La ESP8266 y esta página se conectan al mismo broker MQTT
+        (ej. HiveMQ Cloud, gratis). No hace falta cambiar de red WiFi —
+        funciona también desde la demo pública de GitHub Pages.
+      </div>
+      <div class="calib-row">
+        <span>Host</span>
+        <input type="text" id="mqttHost" placeholder="xxxx.s2.eu.hivemq.cloud" style="flex:1; font-family:'IBM Plex Mono',monospace; padding:4px 6px; border:1px solid var(--ink); background:var(--paper);">
+      </div>
+      <div class="calib-row">
+        <span>Puerto WSS</span>
+        <input type="number" id="mqttPort" value="8884" style="width:90px;">
+      </div>
+      <div class="calib-row">
+        <span>Usuario</span>
+        <input type="text" id="mqttUser" style="flex:1; font-family:'IBM Plex Mono',monospace; padding:4px 6px; border:1px solid var(--ink); background:var(--paper);">
+      </div>
+      <div class="calib-row">
+        <span>Contraseña</span>
+        <input type="password" id="mqttPass" style="flex:1; font-family:'IBM Plex Mono',monospace; padding:4px 6px; border:1px solid var(--ink); background:var(--paper);">
+      </div>
+      <div class="calib-row">
+        <span>Prefijo de topics</span>
+        <input type="text" id="mqttTopic" value="crane/benja" style="flex:1; font-family:'IBM Plex Mono',monospace; padding:4px 6px; border:1px solid var(--ink); background:var(--paper);">
+      </div>
+      <div class="conn-row">
+        <button id="connectBtn">Conectar</button>
+        <button id="simBtn" class="secondary">Solo simular</button>
+      </div>
+      <div id="status">Cargando…</div>
+
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script>
+(function () {
+  // ---------------------------------------------------------------------
+  // Parámetros físicos — medidos directamente de la grúa modelo
+  // ---------------------------------------------------------------------
+  const R = 0.12;
+  const MAST_H = 0.27;
+  const BOOM_H = 0.24;
+  const g = 9.81;
+  const damping = 0.9;
+  const I_BOOM = 0.0015;
+
+  let boomDpsFull = 60;   // °/s del boom a intensidad 100% (calibrable)
+  let hoistMpsFull = 0.05; // m/s del cable a intensidad 100% (calibrable)
+
+  let massKg = 0.15;
+  let safetyMode = false;
+  let torqueKgCm = 5.0;
+  let accelFactor = 0.30;
+  let velFactor = 0.50;
+  let speedPct = 100; // velocidad maxima solicitada por el usuario (0-100)
+
+  const NAIVE_MAX_INTENSITY = 100.0;
+  const NAIVE_MAX_ACCEL_PCT = 300.0; // %/s
+
+  // limites de INTENSIDAD (-100..100) aplicados a la rampa de comando
+  let currentLimits = { maxVel: NAIVE_MAX_INTENSITY, maxAccel: NAIVE_MAX_ACCEL_PCT };
+
+  function computeSafety() {
+    const I_total = I_BOOM + massKg * R * R;
+    const torqueNm = torqueKgCm * 0.0981;
+    const alphaRaw_radps2 = torqueNm / I_total;
+    const alphaRaw_degps2 = alphaRaw_radps2 * 180 / Math.PI;
+    // convertimos la aceleracion fisica (°/s^2) a %/s de intensidad usando
+    // la calibracion boomDpsFull (°/s a 100% de intensidad)
+    const alphaRaw_pctps = (alphaRaw_degps2 / boomDpsFull) * 100;
+
+    if (safetyMode) {
+      currentLimits.maxAccel = alphaRaw_pctps * accelFactor;
+      currentLimits.maxVel = NAIVE_MAX_INTENSITY * velFactor;
+    } else {
+      currentLimits.maxAccel = NAIVE_MAX_ACCEL_PCT;
+      currentLimits.maxVel = NAIVE_MAX_INTENSITY;
+    }
+
+    document.getElementById('computedBox').innerHTML =
+      `I_total = ${I_total.toFixed(5)} kg·m²<br>` +
+      `Capacidad bruta del motor: <b>${alphaRaw_degps2.toFixed(0)} °/s²</b> (${alphaRaw_pctps.toFixed(0)} %/s)<br>` +
+      (safetyMode
+        ? `Aceleración permitida (×${accelFactor.toFixed(2)}): <b>${currentLimits.maxAccel.toFixed(0)} %/s</b><br>`
+        : `Modo seguro apagado: límite fijo <b>${NAIVE_MAX_ACCEL_PCT.toFixed(0)} %/s</b> (ignora la masa)<br>`) +
+      `Intensidad máxima permitida: <b>${currentLimits.maxVel.toFixed(0)}%</b>`;
+
+    sendSafetyToHardware();
+  }
+
+  // ---------------------------------------------------------------------
+  // Ejes: comando de INTENSIDAD (-100..100), no de posición.
+  // ---------------------------------------------------------------------
+  let axis = { rotVel: 0, rotTarget: 0, hoistVel: 0, hoistTarget: 0 };
+  let boomAngleDeg = 0; // estimado, integrado en el tiempo (open-loop)
+  let cableLength = 0.10; // estimado, integrado en el tiempo (open-loop)
+
+  function stepAxisLocal(dt) {
+    for (const [velKey, targetKey] of [['rotVel','rotTarget'], ['hoistVel','hoistTarget']]) {
+      const target = Math.max(-currentLimits.maxVel, Math.min(currentLimits.maxVel, axis[targetKey]));
+      let dv = target - axis[velKey];
+      const maxDv = currentLimits.maxAccel * dt;
+      dv = Math.max(-maxDv, Math.min(maxDv, dv));
+      axis[velKey] += dv;
+      if (Math.abs(axis[velKey]) < 0.5 && Math.abs(target) < 0.01) axis[velKey] = 0;
+    }
+
+    // integracion open-loop de posicion estimada
+    const boomDps = (axis.rotVel / 100) * boomDpsFull;
+    boomAngleDeg = (boomAngleDeg + boomDps * dt) % 360;
+    if (boomAngleDeg < 0) boomAngleDeg += 360;
+
+    const hoistMps = (axis.hoistVel / 100) * hoistMpsFull;
+    cableLength = Math.max(0.02, Math.min(BOOM_H - 0.02, cableLength + hoistMps * dt));
+  }
+
+  let theta = 0, thetaDot = 0;
+  let prevOmegaDeg = 0;
+  let alphaDeg = 0;
+  let maxThetaDeg = 0;
+
+  function stepPendulum(dtFrame) {
+    const SUBSTEPS = 8;
+    const dt = dtFrame / SUBSTEPS;
+    const L = cableLength;
+
+    const omegaDeg = (axis.rotVel / 100) * boomDpsFull;
+    alphaDeg = (omegaDeg - prevOmegaDeg) / Math.max(dtFrame, 0.001);
+    prevOmegaDeg = omegaDeg;
+    const alphaRad = alphaDeg * Math.PI / 180;
+    const a_t = R * alphaRad;
+
+    for (let i = 0; i < SUBSTEPS; i++) {
+      const thetaDD = -(g / L) * Math.sin(theta) - (a_t / L) * Math.cos(theta) - damping * thetaDot;
+      thetaDot += thetaDD * dt;
+      theta += thetaDot * dt;
+    }
+    if (Math.abs(theta) < 0.002 && Math.abs(thetaDot) < 0.02 && Math.abs(a_t) < 1e-4) {
+      theta = 0; thetaDot = 0;
+    }
+    const thetaDegAbs = Math.abs(theta * 180 / Math.PI);
+    if (thetaDegAbs > maxThetaDeg) maxThetaDeg = thetaDegAbs;
+    return { L };
+  }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
+  const canvas = document.getElementById('scene');
+  const ctx = canvas.getContext('2d');
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const pxPerM = 950;
+
+  function draw(L) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = 'rgba(43,76,111,0.10)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 32) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); }
+    for (let y = 0; y < canvas.height; y += 32) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
+
+    ctx.fillStyle = '#1B2430';
+    ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#2B4C6F';
+    ctx.font = '13px "IBM Plex Mono", monospace';
+    ctx.fillText('mástil', cx + 16, cy + 5);
+
+    ctx.strokeStyle = 'rgba(43,76,111,0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,6]);
+    ctx.beginPath(); ctx.arc(cx, cy, R * pxPerM, 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const phi = boomAngleDeg * Math.PI / 180;
+
+    const anchorX = cx + R * pxPerM * Math.cos(phi - Math.PI/2);
+    const anchorY = cy + R * pxPerM * Math.sin(phi - Math.PI/2);
+
+    ctx.strokeStyle = '#1B2430';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(anchorX, anchorY); ctx.stroke();
+
+    ctx.strokeStyle = '#2B4C6F';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 40, -Math.PI/2, phi - Math.PI/2, false);
+    ctx.stroke();
+    ctx.fillStyle = '#2B4C6F';
+    ctx.font = '16px "IBM Plex Mono", monospace';
+    ctx.fillText('φ = ' + boomAngleDeg.toFixed(0) + '°', cx + 50, cy - 45);
+
+    ctx.font = '13px "IBM Plex Mono", monospace';
+    const midX = cx + (anchorX - cx) * 0.55, midY = cy + (anchorY - cy) * 0.55;
+    ctx.fillText('R = 0.12 m', midX + 10, midY);
+
+    const tangX = Math.cos(phi);
+    const tangY = Math.sin(phi);
+    const swingPx = L * pxPerM * Math.sin(theta);
+    const loadX = anchorX + tangX * swingPx;
+    const loadY = anchorY + tangY * swingPx;
+
+    ctx.strokeStyle = 'rgba(43,76,111,0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2,4]);
+    ctx.beginPath(); ctx.moveTo(anchorX, anchorY); ctx.lineTo(anchorX + tangX * L * pxPerM, anchorY + tangY * L * pxPerM); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = safetyMode ? '#1F6F5C' : '#2B4C6F';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(anchorX, anchorY); ctx.lineTo(loadX, loadY); ctx.stroke();
+
+    const thetaDegAbs = Math.abs(theta * 180/Math.PI);
+    const loadColor = thetaDegAbs > 20 ? '#C1440E' : (thetaDegAbs > 8 ? '#F2B705' : '#1B2430');
+    ctx.fillStyle = loadColor;
+    ctx.beginPath(); ctx.arc(loadX, loadY, 16, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#1B2430';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#1B2430';
+    ctx.font = '13px "IBM Plex Mono", monospace';
+    ctx.fillText('θ = ' + (theta*180/Math.PI).toFixed(1) + '°', loadX + 20, loadY);
+  }
+
+  let lastT = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+
+    stepAxisLocal(dt);
+    const { L } = stepPendulum(dt);
+    draw(L);
+    updateReadouts(L);
+
+    requestAnimationFrame(loop);
+  }
+
+  function updateReadouts(L) {
+    const thetaDeg = theta * 180 / Math.PI;
+    document.getElementById('rRot').textContent = boomAngleDeg.toFixed(1) + '°';
+    document.getElementById('rL').textContent = L.toFixed(2) + ' m';
+    document.getElementById('rOmega').textContent = ((axis.rotVel/100)*boomDpsFull).toFixed(1) + ' °/s';
+    document.getElementById('rAlpha').textContent = alphaDeg.toFixed(1) + ' °/s²';
+    document.getElementById('rTheta').textContent = thetaDeg.toFixed(1) + '°';
+    document.getElementById('rMaxTheta').textContent = maxThetaDeg.toFixed(1) + '°';
+
+    const h = L * (1 - Math.cos(theta));
+    const PE = massKg * g * h;
+    const KE = 0.5 * massKg * Math.pow(L * thetaDot, 2);
+    const E = PE + KE;
+    const Emax = massKg * g * L * 1.2 + 1e-6;
+    const pct = Math.max(0, Math.min(100, (E / Emax) * 100));
+    document.getElementById('energyFill').style.width = pct.toFixed(0) + '%';
+
+    const loadHeight = Math.max(0, BOOM_H - L);
+    const pctHeight = Math.max(0, Math.min(100, (loadHeight / MAST_H) * 100));
+    document.getElementById('heightFill').style.height = pctHeight.toFixed(0) + '%';
+    document.getElementById('heightLabel').textContent = loadHeight.toFixed(2) + ' m';
+  }
+
+  requestAnimationFrame(loop);
+
+  // ---------------------------------------------------------------------
+  // Controles UI + MQTT
+  // ---------------------------------------------------------------------
+  let mqttClient = null;
+  let connected = false;   // conectados al broker
+  let hwOnline = false;    // la grúa confirmó estar online (topic .../status)
+  let topicBase = 'crane/benja';
+  const statusEl = document.getElementById('status');
+
+  function setStatus(msg, isErr) {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle('err', !!isErr);
+  }
+
+  function publish(subtopic, payload) {
+    if (mqttClient && connected) {
+      mqttClient.publish(topicBase + subtopic, String(payload));
+    }
+  }
+
+  function sendMove(axisName, dir) { publish('/cmd/' + axisName, dir); }
+  function sendStop() { publish('/cmd/stop', '1'); }
+  function sendSafetyToHardware() {
+    publish('/cmd/safety', `${safetyMode ? 1 : 0},${currentLimits.maxVel.toFixed(1)},${currentLimits.maxAccel.toFixed(1)}`);
+  }
+
+  // Mientras un botón está presionado, reenviamos el comando cada 300ms —
+  // si MQTT pierde un mensaje puntual, el próximo reintento lo corrige
+  // solo (a diferencia de HTTP, acá no hay confirmación por request).
+  let holdIntervals = {};
+  function bindHold(btnId, axisName, dirSign) {
+    const el = document.getElementById(btnId);
+    const start = (e) => {
+      e.preventDefault();
+      el.classList.add('active');
+      axis[axisName + 'Target'] = dirSign * speedPct;
+      sendMove(axisName, dirSign);
+      clearInterval(holdIntervals[btnId]);
+      holdIntervals[btnId] = setInterval(() => sendMove(axisName, dirSign), 300);
+    };
+    const stop = () => {
+      el.classList.remove('active');
+      axis[axisName + 'Target'] = 0;
+      clearInterval(holdIntervals[btnId]);
+      sendMove(axisName, 0);
+    };
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerup', stop);
+    el.addEventListener('pointerleave', stop);
+    el.addEventListener('pointercancel', stop);
+  }
+  bindHold('rotLeft', 'rot', -1);
+  bindHold('rotRight', 'rot', 1);
+  bindHold('hoistUp', 'hoist', 1);
+  bindHold('hoistDown', 'hoist', -1);
+
+  document.getElementById('stopBtn').addEventListener('click', () => {
+    axis.rotTarget = 0; axis.hoistTarget = 0;
+    Object.values(holdIntervals).forEach(clearInterval);
+    sendStop();
+  });
+
+  document.getElementById('speedSlider').addEventListener('input', (e) => {
+    speedPct = parseInt(e.target.value, 10);
+    document.getElementById('speedVal').textContent = speedPct + '%';
+  });
+
+  document.getElementById('boomDpsInput').addEventListener('input', (e) => {
+    boomDpsFull = Math.max(1, parseFloat(e.target.value) || 60);
+    computeSafety();
+  });
+  document.getElementById('hoistMpsInput').addEventListener('input', (e) => {
+    hoistMpsFull = Math.max(0.001, parseFloat(e.target.value) || 0.05);
+  });
+  document.getElementById('resetPosBtn').addEventListener('click', () => {
+    boomAngleDeg = 0;
+    cableLength = 0.10;
+    theta = 0; thetaDot = 0; maxThetaDeg = 0;
+    setStatus('Posición estimada reiniciada (boom en 0°, cable en 0.10 m).');
+  });
+
+  document.getElementById('massSlider').addEventListener('input', (e) => {
+    massKg = parseInt(e.target.value, 10) / 100;
+    document.getElementById('massVal').textContent = massKg.toFixed(2) + ' kg';
+    computeSafety();
+  });
+
+  const safetySwitch = document.getElementById('safetySwitch');
+  const safetyDetail = document.getElementById('safetyDetail');
+  safetySwitch.addEventListener('click', () => {
+    safetyMode = !safetyMode;
+    safetySwitch.classList.toggle('on', safetyMode);
+    safetyDetail.classList.toggle('disabled', !safetyMode);
+    computeSafety();
+  });
+  document.getElementById('torqueSlider').addEventListener('input', (e) => {
+    torqueKgCm = parseInt(e.target.value, 10) / 10;
+    document.getElementById('torqueVal').textContent = torqueKgCm.toFixed(1) + ' kg·cm';
+    computeSafety();
+  });
+  document.getElementById('factorSlider').addEventListener('input', (e) => {
+    accelFactor = parseInt(e.target.value, 10) / 100;
+    document.getElementById('factorVal').textContent = accelFactor.toFixed(2) + '×';
+    computeSafety();
+  });
+  document.getElementById('velfactorSlider').addEventListener('input', (e) => {
+    velFactor = parseInt(e.target.value, 10) / 100;
+    document.getElementById('velfactorVal').textContent = velFactor.toFixed(2) + '×';
+    computeSafety();
+  });
+
+  // guarda/recupera los datos del broker en este navegador (no en el repo)
+  const FIELDS = ['mqttHost', 'mqttPort', 'mqttUser', 'mqttTopic'];
+  FIELDS.forEach(id => {
+    const saved = localStorage.getItem('grua_' + id);
+    if (saved !== null) document.getElementById(id).value = saved;
+  });
+
+  document.getElementById('connectBtn').addEventListener('click', () => {
+    const host = document.getElementById('mqttHost').value.trim();
+    const port = document.getElementById('mqttPort').value.trim();
+    const user = document.getElementById('mqttUser').value.trim();
+    const pass = document.getElementById('mqttPass').value;
+    topicBase = document.getElementById('mqttTopic').value.trim() || 'crane/benja';
+
+    if (!host) { setStatus('Falta el host del broker MQTT.', true); return; }
+
+    FIELDS.forEach(id => localStorage.setItem('grua_' + id, document.getElementById(id).value));
+
+    if (mqttClient) { try { mqttClient.end(true); } catch (e) {} }
+
+    const url = `wss://${host}:${port}/mqtt`;
+    setStatus('Conectando a ' + url + ' ...');
+
+    mqttClient = mqtt.connect(url, {
+      username: user,
+      password: pass,
+      clientId: 'grua-web-' + Math.random().toString(16).slice(2),
+      clean: true,
+      connectTimeout: 8000,
+      reconnectPeriod: 3000,
+    });
+
+    mqttClient.on('connect', () => {
+      connected = true;
+      setStatus('Conectado al broker. Esperando confirmación de la grúa…');
+      mqttClient.subscribe(topicBase + '/status');
+      mqttClient.subscribe(topicBase + '/state');
+      sendSafetyToHardware();
+    });
+
+    mqttClient.on('message', (topic, payloadBuf) => {
+      const payload = payloadBuf.toString();
+      if (topic === topicBase + '/status') {
+        hwOnline = payload === 'online';
+        setStatus(hwOnline
+          ? 'Grúa conectada y confirmada online.'
+          : 'Broker conectado, pero la grúa no responde (¿está encendida y en su WiFi?).', !hwOnline);
+      }
+    });
+
+    mqttClient.on('error', (err) => {
+      setStatus('Error de conexión MQTT: ' + err.message, true);
+    });
+    mqttClient.on('close', () => {
+      connected = false; hwOnline = false;
+      setStatus('Desconectado del broker.', true);
+    });
+  });
+
+  document.getElementById('simBtn').addEventListener('click', () => {
+    if (mqttClient) { try { mqttClient.end(true); } catch (e) {} }
+    connected = false; hwOnline = false;
+    setStatus('Modo simulación local activo (sin hardware).');
+  });
+
+  safetyDetail.classList.add('disabled');
+  computeSafety();
+  setStatus('Sin conexión — modo simulación local activo. Completá los datos del broker y conectá cuando quieras.');
+
+})();
+</script>
+
+</body>
+</html>
